@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TWISTED JUMP</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@900&family=Poppins:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; user-select: none; outline: none; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #020617; font-family: 'Poppins', sans-serif; color: white; }
+
+        /* --- SISTEMA SCHERMATE --- */
+        .screen { position: absolute; inset: 0; transition: 0.8s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; }
+        
+        #home-screen { z-index: 100; background: radial-gradient(circle at center, #0f172a 0%, #020617 100%); }
+        #map-screen { z-index: 50; transform: translateY(100%); background: #020617; }
+        #skin-screen { z-index: 200; transform: translateX(100%); background: #0f172a; }
+        
+        /* Classi di movimento */
+        .up { transform: translateY(-100%) !important; }
+        .active-map { transform: translateY(0) !important; z-index: 150 !important; }
+        .active-skin { transform: translateX(0) !important; }
+
+        /* --- LOGO & HOME --- */
+        .logo-area { text-align: center; }
+        .logo-area h1 { font-size: 5rem; margin: 0; font-weight: 900; letter-spacing: -3px; line-height: 0.9; text-transform: uppercase; }
+        #preview-box { width: 100px; height: 100px; background: #00d2ff; box-shadow: 0 0 50px rgba(0,210,255,0.4); margin: 40px 0; animation: float 3s ease-in-out infinite; border-radius: 10px; }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
+
+        .bottom-nav { position: absolute; bottom: 50px; display: flex; gap: 40px; background: rgba(255,255,255,0.05); padding: 15px 50px; border-radius: 100px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .nav-link { font-weight: 700; opacity: 0.6; cursor: pointer; transition: 0.3s; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 2px; }
+        .nav-link:hover { opacity: 1; color: #00d2ff; }
+
+        /* --- MAPPA & AURORA --- */
+        .galaxy { display: flex; gap: 100px; }
+        .planet { width: 180px; height: 180px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 4rem; transition: 0.4s; position: relative; }
+        .planet.locked { opacity: 0.1; filter: grayscale(1); cursor: not-allowed; }
+        
+        .unlocked-glow { animation: aurora 1.5s infinite alternate !important; border-color: #f1c40f !important; opacity: 1 !important; filter: grayscale(0) !important; }
+        @keyframes aurora { 
+            0% { box-shadow: 0 0 15px #f1c40f; transform: scale(1); }
+            100% { box-shadow: 0 0 50px #f1c40f, 0 0 80px rgba(255,0,255,0.3); transform: scale(1.05); }
+        }
+
+        /* --- SKINS --- */
+        .skin-grid { display: flex; gap: 20px; margin-top: 20px; }
+        .skin-item { width: 80px; height: 80px; border-radius: 15px; cursor: pointer; border: 3px solid rgba(255,255,255,0.1); position: relative; transition: 0.3s; }
+        .skin-item.locked::after { content: '🔒'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); border-radius: 12px; }
+        .skin-item.selected { border-color: #00d2ff; transform: scale(1.1); box-shadow: 0 0 20px #00d2ff; }
+
+        /* --- POPUPS & HUD --- */
+        .popup { position: absolute; inset: 0; z-index: 2000; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(2,6,23,0.95); }
+        .popup-title { font-family: 'Orbitron'; font-size: 6rem; margin: 0; }
+        .btn-ui { background: white; color: black; border: none; padding: 15px 40px; border-radius: 10px; font-weight: 900; cursor: pointer; margin: 10px; font-family: 'Orbitron'; transition: 0.3s; }
+        .btn-ui:hover { background: #00d2ff; color: white; transform: scale(1.1); }
+
+        #hud { position: absolute; top: 30px; left: 30px; right: 30px; display: flex; justify-content: space-between; z-index: 1000; visibility: hidden; pointer-events: none; }
+        canvas { display: none; background: #0a0414; position: absolute; inset: 0; z-index: 500; }
+    </style>
+</head>
+<body>
+
+    <div id="home-screen" class="screen">
+        <div class="logo-area"><h1>TWISTED<br><span id="logo-name" style="color:#00d2ff">JUMP</span></h1></div>
+        <div id="preview-box"></div>
+        <div class="bottom-nav">
+            <div class="nav-link" onclick="move('map')">Play</div>
+            <div class="nav-link" onclick="move('skins')">Skins</div>
+            <div class="nav-link" onclick="toggleSets()">Settings</div>
+        </div>
+        <div id="sets" style="display:none; margin-top:20px;">
+            <input type="text" id="name-in" placeholder="NOME" oninput="upName()" style="background:none; border:1px solid #00d2ff; color:white; padding:10px; border-radius:8px; text-align:center; font-family:'Orbitron';">
+        </div>
+    </div>
+
+    <div id="skin-screen" class="screen">
+        <h1 style="font-family:'Orbitron';">SKIN WORKSHOP</h1>
+        <div class="skin-grid">
+            <div id="s-blue" class="skin-item selected" style="background:#00d2ff" onclick="pickSkin('#00d2ff', 'blue')"></div>
+            <div id="s-red" class="skin-item locked" style="background:#ff4757" onclick="pickSkin('#ff4757', 'red')"></div>
+            <div id="s-green" class="skin-item locked" style="background:#2ecc71" onclick="pickSkin('#2ecc71', 'green')"></div>
+            <div id="s-yellow" class="skin-item locked" style="background:#f1c40f" onclick="pickSkin('#f1c40f', 'yellow')"></div>
+        </div>
+        <div id="skin-tip" style="margin-top:20px; color:#00d2ff;">Scegli il tuo stile</div>
+        <div class="nav-link" onclick="move('home')" style="margin-top:40px;">← Indietro</div>
+    </div>
+
+    <div id="map-screen" class="screen">
+        <h1 style="font-family:'Orbitron'; margin-bottom:40px;">GALACTIC MAP</h1>
+        <div class="galaxy">
+            <div class="planet-card" style="text-align:center">
+                <div class="planet" onclick="play()">🌲</div>
+                <p>NEON FOREST</p>
+                <div id="stars-1" style="color:#f1c40f"></div>
+            </div>
+            <div class="planet-card" style="text-align:center">
+                <div id="p2" class="planet locked">🌋</div>
+                <p>MAGMA CORE</p>
+            </div>
+        </div>
+        <div class="nav-link" onclick="move('home')" style="margin-top:50px;">← Menu</div>
+    </div>
+
+    <div id="death-screen" class="popup">
+        <h1 class="popup-title" style="color:#ff4757;">FAILED</h1>
+        <button class="btn-ui" onclick="play()">Retry</button>
+        <button class="btn-ui" style="background:none; color:white; border:1px solid white;" onclick="location.reload()">Menu</button>
+    </div>
+
+    <div id="win-screen" class="popup">
+        <h1 class="popup-title" style="color:#00d2ff;">WIN</h1>
+        <div id="win-stars" style="font-size:4rem; color:#f1c40f; margin:15px;"></div>
+        <button class="btn-ui" onclick="unlockNextWorld()">Sblocca Mondo 2</button>
+    </div>
+
+    <div id="hud">
+        <div style="font-weight:900;"><span id="hud-name">JUMP</span>: <span id="score">0</span> / 25</div>
+        <div style="font-weight:900; color:#f1c40f;">✨ <span id="run-stars">0</span></div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    let db = JSON.parse(localStorage.getItem('tj_vFinal_Full')) || {
+        name: 'JUMP', color: '#00d2ff', w1_stars: 0, w1_done: false, totalStars: 0
+    };
+
+    function save() { localStorage.setItem('tj_vFinal_Full', JSON.stringify(db)); }
+
+    function upName() {
+        let n = document.getElementById('name-in').value.toUpperCase() || 'JUMP';
+        db.name = n;
+        document.getElementById('logo-name').innerText = n;
+        document.getElementById('hud-name').innerText = n;
+        save();
+    }
+
+    function refreshUI() {
+        document.getElementById('logo-name').innerText = db.name;
+        document.getElementById('hud-name').innerText = db.name;
+        document.getElementById('preview-box').style.background = db.color;
+        document.getElementById('stars-1').innerText = '★'.repeat(db.w1_stars);
+        
+        if(db.totalStars >= 50) document.getElementById('s-red').classList.remove('locked');
+        if(db.w1_done) {
+            document.getElementById('s-green').classList.remove('locked');
+            const p2 = document.getElementById('p2');
+            p2.classList.remove('locked');
+            p2.classList.add('unlocked-glow');
+        }
+    }
+
+    function move(to) {
+        const h = document.getElementById('home-screen');
+        const m = document.getElementById('map-screen');
+        const s = document.getElementById('skin-screen');
+        
+        h.classList.remove('up'); 
+        m.classList.remove('active-map'); 
+        s.classList.remove('active-skin');
+
+        if(to === 'map') { h.classList.add('up'); m.classList.add('active-map'); }
+        if(to === 'skins') s.classList.add('active-skin');
+    }
+
+    function pickSkin(color, id) {
+        const tip = document.getElementById('skin-tip');
+        let can = true;
+        if(id === 'red' && db.totalStars < 50) { tip.innerText = "Ti servono 50 stelle!"; can = false; }
+        if(id === 'green' && !db.w1_done) { tip.innerText = "Batti il Mondo 1!"; can = false; }
+        if(id === 'yellow' && db.w1_stars < 3) { tip.innerText = "Ottieni 3 stelle nel Mondo 1!"; can = false; }
+        
+        if(can) {
+            db.color = color;
+            tip.innerText = "Skin equipaggiata!";
+            document.querySelectorAll('.skin-item').forEach(i => i.classList.remove('selected'));
+            document.getElementById('s-'+id).classList.add('selected');
+            refreshUI(); save();
+        }
+    }
+
+    function toggleSets() { 
+        let s = document.getElementById('sets'); 
+        s.style.display = s.style.display === 'none' ? 'block' : 'none'; 
+    }
+
+    function unlockNextWorld() {
+        db.w1_done = true; save();
+        document.getElementById('win-screen').style.display = "none";
+        document.getElementById('gameCanvas').style.display = "none";
+        document.getElementById('hud').style.visibility = "hidden";
+        move('map');
+        refreshUI();
+    }
+
+    // --- ENGINE ---
+    const cvs = document.getElementById('gameCanvas');
+    const ctx = cvs.getContext('2d');
+    let running = false, pts = 0, starsNow = 0, obs = [];
+    const player = { x: 200, y: 0, w: 50, h: 50, pos: 'bottom', vy: 30, jumping: false };
+
+    function play() {
+        document.getElementById('map-screen').classList.remove('active-map'); // Chiude la mappa
+        document.getElementById('death-screen').style.display = "none";
+        document.getElementById('hud').style.visibility = "visible";
+        cvs.style.display = "block";
+        cvs.width = window.innerWidth; cvs.height = window.innerHeight;
+        pts = 0; starsNow = 0; obs = []; running = true;
+        spawnObs(); loop();
+    }
+
+    function spawnObs() {
+        if(!running) return;
+        const side = Math.random() > 0.5 ? 'top' : 'bottom';
+        obs.push({ x: cvs.width + 100, y: side === 'top' ? 0 : cvs.height - 150, w: 70, h: 150, side, star: Math.random() > 0.1 });
+        setTimeout(spawnObs, Math.max(450, 1000 - (pts * 20)));
+    }
+
+    function loop() {
+        if(!running) return;
+        ctx.clearRect(0,0,cvs.width, cvs.height);
+
+        // Salto
+        if(player.jumping) {
+            player.y += (player.pos === 'bottom' ? -player.vy : player.vy);
+            if(player.y <= 60 || player.y >= cvs.height - 120) { player.pos = (player.pos === 'bottom' ? 'top' : 'bottom'); player.jumping = false; }
+        } else {
+            player.y = (player.pos === 'bottom' ? cvs.height - 110 : 60);
+        }
+
+        // Player
+        ctx.fillStyle = db.color; ctx.shadowBlur = 20; ctx.shadowColor = db.color;
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+        ctx.shadowBlur = 0;
+
+        obs.forEach((o, i) => {
+            o.x -= 12;
+            // Ostacolo (Albero Neon)
+            ctx.fillStyle = "#2ecc71";
+            ctx.beginPath(); ctx.arc(o.x + 35, o.side === 'top' ? o.h : o.y, 60, 0, Math.PI*2); ctx.fill();
+            
+            // Stelle
+            if(o.star) {
+                ctx.fillStyle = "#f1c40f"; ctx.beginPath(); ctx.arc(o.x+35, cvs.height/2, 22, 0, Math.PI*2); ctx.fill();
+                if(player.x < o.x+80 && player.x+50 > o.x && Math.abs(player.y+25 - cvs.height/2) < 140) { 
+                    o.star = false; starsNow++; db.totalStars++; 
+                    document.getElementById('run-stars').innerText = starsNow; 
+                }
+            }
+
+            // Collisione
+            if(player.x < o.x + o.w && player.x + player.w > o.x && player.y < o.y + o.h && player.y + player.h > o.y) { 
+                running = false; document.getElementById('death-screen').style.display = "flex"; 
+            }
+
+            if(o.x < -100) { obs.splice(i, 1); pts++; document.getElementById('score').innerText = pts; }
+        });
+
+        if(pts >= 25) {
+            running = false;
+            document.getElementById('win-screen').style.display = "flex";
+            let s = starsNow >= 15 ? 3 : (starsNow >= 8 ? 2 : 1);
+            document.getElementById('win-stars').innerText = '★'.repeat(s);
+            db.w1_stars = Math.max(db.w1_stars, s); save();
+        } else requestAnimationFrame(loop);
+    }
+
+    // CONTROLLI
+    function handleAction() { if(running) player.jumping = true; }
+    window.addEventListener('mousedown', handleAction);
+    window.addEventListener('keydown', (e) => { if(e.code === 'Space') { e.preventDefault(); handleAction(); } });
+
+    refreshUI();
+</script>
+</body>
+</html>
