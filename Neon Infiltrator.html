@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cyber Maze - Giacomo Creation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; user-select: none; touch-action: none; margin: 0; padding: 0; }
+        body {
+            background-color: #000;
+            color: #00fbff;
+            font-family: 'Orbitron', sans-serif;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; min-height: 100vh; overflow: hidden;
+            transition: color 0.5s;
+        }
+
+        #ui {
+            width: 100%; max-width: 500px; display: flex;
+            justify-content: space-between; padding: 15px;
+            font-size: 1rem; text-transform: uppercase; letter-spacing: 1px;
+            z-index: 10;
+        }
+
+        #game-area {
+            position: relative; width: 95vw; max-width: 500px;
+            height: 75vh; max-height: 650px;
+            background: #000; border: 2px solid #00fbff; border-radius: 15px;
+            box-shadow: 0 0 20px rgba(0, 251, 255, 0.1);
+            overflow: hidden;
+            transition: border-color 0.5s, box-shadow 0.5s;
+        }
+
+        /* Griglia di sfondo */
+        #game-area::before {
+            content: ""; position: absolute; width: 200%; height: 200%;
+            top: -50%; left: -50%;
+            background-image: linear-gradient(#111 1px, transparent 1px), linear-gradient(90deg, #111 1px, transparent 1px);
+            background-size: 30px 30px; transform: perspective(500px) rotateX(60deg);
+            z-index: 0; opacity: 0.4;
+        }
+
+        #player {
+            position: absolute; width: 18px; height: 18px;
+            background: #fff; border-radius: 50%;
+            box-shadow: 0 0 15px #fff, 0 0 25px #00fbff;
+            z-index: 100; pointer-events: none;
+            transform: translate(-50%, -50%);
+        }
+
+        .scan-cone {
+            position: absolute; width: 0; height: 0;
+            border-left: 35px solid transparent; border-right: 35px solid transparent;
+            border-bottom: 280px solid rgba(255, 0, 85, 0.2);
+            transform-origin: top center; pointer-events: none; z-index: 10;
+        }
+
+        #target {
+            position: absolute; width: 30px; height: 30px;
+            border: 2px solid #ffcc00;
+            background: #ffcc00; 
+            box-shadow: 0 0 20px #ffcc00; z-index: 5;
+            animation: pulseTarget 1.2s infinite alternate;
+        }
+
+        @keyframes pulseTarget {
+            0% { transform: scale(0.9); opacity: 0.8; }
+            100% { transform: scale(1.1); opacity: 1; }
+        }
+
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 200; text-align: center; padding: 20px;
+        }
+
+        .btn {
+            background: #00fbff; color: #000; border: none;
+            padding: 15px 40px; font-size: 1.2rem; font-family: 'Orbitron', sans-serif;
+            cursor: pointer; font-weight: bold; border-radius: 5px; margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div>Nodi: <span id="progress">0</span>/5</div>
+        <div>Livello: <span id="level">1</span>/10</div>
+    </div>
+
+    <div id="game-area">
+        <div id="overlay">
+            <h1 id="m-title" style="color: #00fbff;">CYBER MAZE</h1>
+            <p id="m-desc" style="color: #888; margin-top: 10px;">Infiltrati nei 10 livelli.<br>Evita i sensori rossi.</p>
+            <button class="btn" id="startBtn" onclick="startGame()">AVVIA HACK</button>
+        </div>
+        <div id="player"></div>
+        <div id="target"></div>
+        <div id="sensors-container"></div>
+    </div>
+
+    <script>
+        const area = document.getElementById('game-area');
+        const player = document.getElementById('player');
+        const target = document.getElementById('target');
+        const sensorsCont = document.getElementById('sensors-container');
+        const progressEl = document.getElementById('progress');
+        const levelEl = document.getElementById('level');
+        const overlay = document.getElementById('overlay');
+        const mTitle = document.getElementById('m-title');
+        const mDesc = document.getElementById('m-desc');
+        const startBtn = document.getElementById('startBtn');
+
+        let pX = 250, pY = 500;
+        let level = 1, progress = 0;
+        let gameActive = false;
+        let sensors = [];
+        let lastTouchX, lastTouchY;
+
+        const themes = [
+            { ui: '#00fbff', laser: 'rgba(255, 0, 85, 0.3)', target: '#ffcc00' },
+            { ui: '#39ff14', laser: 'rgba(255, 0, 255, 0.3)', target: '#00fbff' },
+            { ui: '#ffcc00', laser: 'rgba(0, 251, 255, 0.3)', target: '#39ff14' },
+            { ui: '#ff00ff', laser: 'rgba(57, 255, 20, 0.3)', target: '#ffcc00' },
+            { ui: '#ff4500', laser: 'rgba(0, 255, 255, 0.3)', target: '#ff00ff' },
+            { ui: '#00fbff', laser: 'rgba(255, 204, 0, 0.3)', target: '#39ff14' },
+            { ui: '#39ff14', laser: 'rgba(255, 69, 0, 0.3)', target: '#ff00ff' },
+            { ui: '#ffcc00', laser: 'rgba(255, 0, 255, 0.3)', target: '#00fbff' },
+            { ui: '#ff00ff', laser: 'rgba(0, 251, 255, 0.3)', target: '#39ff14' },
+            { ui: '#ffffff', laser: 'rgba(255, 0, 0, 0.4)', target: '#ffcc00' }
+        ];
+
+        function handleInput(e) {
+            if(!gameActive) return;
+            const rect = area.getBoundingClientRect();
+
+            if (e.touches) {
+                e.preventDefault();
+                const clientX = e.touches[0].clientX;
+                const clientY = e.touches[0].clientY;
+                if (e.type === 'touchstart') {
+                    lastTouchX = clientX; lastTouchY = clientY;
+                } else {
+                    let dx = clientX - lastTouchX; let dy = clientY - lastTouchY;
+                    pX = Math.max(15, Math.min(rect.width - 15, pX + dx));
+                    pY = Math.max(15, Math.min(rect.height - 15, pY + dy));
+                    lastTouchX = clientX; lastTouchY = clientY;
+                }
+            } else {
+                pX = Math.max(15, Math.min(rect.width - 15, e.clientX - rect.left));
+                pY = Math.max(15, Math.min(rect.height - 15, e.clientY - rect.top));
+            }
+            player.style.left = pX + 'px';
+            player.style.top = pY + 'px';
+            checkTarget();
+        }
+
+        area.addEventListener('mousemove', handleInput);
+        area.addEventListener('touchstart', handleInput, {passive: false});
+        area.addEventListener('touchmove', handleInput, {passive: false});
+
+        function startGame() {
+            level = 1; progress = 0; gameActive = true;
+            pX = area.clientWidth / 2; pY = area.clientHeight - 50;
+            overlay.style.display = 'none';
+            updateTheme();
+            updateUI();
+            spawnTarget();
+            createSensors();
+            requestAnimationFrame(update);
+        }
+
+        function createSensors() {
+            sensorsCont.innerHTML = ''; sensors = [];
+            let count = Math.min(level + 1, 9);
+            let rows = Math.ceil(count / 3);
+            for(let i=0; i<count; i++) {
+                const s = document.createElement('div');
+                s.className = 'scan-cone';
+                s.style.borderBottomColor = themes[level-1].laser;
+                sensorsCont.appendChild(s);
+                sensors.push({
+                    el: s,
+                    x: (area.clientWidth / 3) * (i % 3) + 50,
+                    y: (area.clientHeight / 4) * Math.floor(i / 3) + 50,
+                    angle: Math.random() * 360,
+                    rotSpeed: (0.8 + Math.random()) * (1 + level * 0.12)
+                });
+            }
+        }
+
+        function spawnTarget() {
+            target.style.left = (Math.random() * (area.clientWidth - 60) + 30) + 'px';
+            target.style.top = (Math.random() * (area.clientHeight - 60) + 30) + 'px';
+        }
+
+        function checkTarget() {
+            const tr = target.getBoundingClientRect();
+            const pr = player.getBoundingClientRect();
+            if(!(pr.right < tr.left || pr.left > tr.right || pr.bottom < tr.top || pr.top > tr.bottom)) {
+                progress++;
+                if(progress >= 5) {
+                    if(level >= 10) { winGame(); return; }
+                    level++; progress = 0;
+                    updateTheme(); createSensors();
+                }
+                updateUI(); spawnTarget();
+            }
+        }
+
+        function updateUI() {
+            progressEl.innerText = progress;
+            levelEl.innerText = level;
+        }
+
+        function updateTheme() {
+            const t = themes[level-1];
+            document.body.style.color = t.ui;
+            area.style.borderColor = t.ui;
+            startBtn.style.backgroundColor = t.ui;
+            player.style.boxShadow = `0 0 15px #fff, 0 0 25px ${t.ui}`;
+            target.style.backgroundColor = t.target;
+            target.style.borderColor = t.target;
+            target.style.boxShadow = `0 0 20px ${t.target}`;
+        }
+
+        function update() {
+            if(!gameActive) return;
+            sensors.forEach(s => {
+                s.angle += s.rotSpeed;
+                s.el.style.left = s.x + 'px'; s.el.style.top = s.y + 'px';
+                s.el.style.transform = `rotate(${s.angle}deg)`;
+                let dx = pX - s.x; let dy = pY - s.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                if(dist < 280) {
+                    let angleToPlayer = Math.atan2(dy, dx) * 180 / Math.PI - 90;
+                    let diff = Math.abs(((s.angle - angleToPlayer + 180) % 360) - 180);
+                    if(diff < 12) gameOver(); 
+                }
+            });
+            requestAnimationFrame(update);
+        }
+
+        function gameOver() {
+            gameActive = false;
+            overlay.style.display = 'flex';
+            mTitle.innerText = "DETECTED";
+            mTitle.style.color = "#ff0055";
+            startBtn.innerText = "RETRY";
+        }
+
+        function winGame() {
+            gameActive = false;
+            overlay.style.display = 'flex';
+            mTitle.innerText = "SYSTEM HACKED";
+            mTitle.style.color = "#ffcc00";
+            mDesc.innerText = "Grande lavoro, Agente Giacomo!";
+            startBtn.innerText = "PLAY AGAIN";
+        }
+    </script>
+</body>
+</html>
